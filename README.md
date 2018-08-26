@@ -49,6 +49,8 @@ rm -rf deployments.target/
   
 Requirements:
   - jq
+  - kubernetes 1.9.x+
+  - kops 1.9.x+
 
 
 Limitations:
@@ -57,5 +59,9 @@ Limitations:
 
 Links:
 https://www.ianlewis.org/en/bluegreen-deployments-kubernetes
+
 https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+
 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+
+

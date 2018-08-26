@@ -42,10 +42,18 @@ for SERVICE in $(kubectl -n$NAMESPACE get services -o jsonpath={..metadata.name}
 do
     APP_NAME=$(kubectl -n$NAMESPACE get service $SERVICE -o jsonpath='{ ..spec.selector.app }')
     LIVE_VERSION=$(kubectl -n$NAMESPACE get service $SERVICE -o jsonpath='{ ..spec.selector.version }')
+    if [ x"$LIVE_VERSION" = "x" ]; then
+        echo couldnt get version info, Aborting
+        exit -1
+    fi
     for DEPLOYMENT_INFO in $(kubectl -n$NAMESPACE get deployments -l app=$APP_NAME -o jsonpath='{range .items[*]}{@.metadata.name}/{@.metadata.labels.version}{"\n"}{end}')
     do
           DEPLOYMENT_NAME=${DEPLOYMENT_INFO%%/*}
           VERSION=${DEPLOYMENT_INFO##*/}
+          if [ x"$VERSION" = "x" ]; then
+              echo couldnt get version info, Aborting
+              exit -1
+          fi
           if [ x"$VERSION" != x"$LIVE_VERSION" ]; then
              DEPLOYMENTS_TO_DELETE="$DEPLOYMENTS_TO_DELETE $DEPLOYMENT_NAME"
           fi
@@ -56,12 +64,14 @@ if [ x"$DEPLOYMENTS_TO_DELETE" = "x" ]; then
     echo Couldnt find any deployments to Delete, Aborting
     exit -1
 fi
+DEPLOYMENTS_TO_DELETE_DEDUPED=$(echo $DEPLOYMENTS_TO_DELETE | tr ' ' '\n' | sort -u) 
+
 
 
 #1.1 Determine the "version" annotations for the set of deployments:
 #TODO - delete the IG(s) associated with the version annotation from the deployments... 
 #for now just abort if it doesnt match the "oldest IG"
-VERSIONS=$(kubectl -n$NAMESPACE get deployments $DEPLOYMENTS_TO_DELETE -o jsonpath='{ range .items[*] }{ .metadata.labels.version }{"\n"}{end}')
+VERSIONS=$(kubectl -n$NAMESPACE get deployments $DEPLOYMENTS_TO_DELETE_DEDUPED -o jsonpath='{ range .items[*] }{ .metadata.labels.version }{"\n"}{end}')
 if [ "1" != "$(echo "$VERSIONS"|uniq|wc -l)" ]; then
    echo Found some inconsistent deployments, please clean up manually, Aborting
    exit -1
@@ -87,7 +97,7 @@ if [ "$NODE_LABEL" != "$VERSION_TO_DELETE" ]; then
 fi
 
 echo The following deployments are not selected by the services and will be deleted: 
-echo "  "$DEPLOYMENTS_TO_DELETE
+echo "  "$DEPLOYMENTS_TO_DELETE_DEDUPED
 echo
 echo Next, the oldest IG will be deleted: $OLDEST_IG
 
@@ -100,7 +110,7 @@ if ! $BATCH_MODE; then
     fi
 fi
     
-for DEPLOYMENT in $DEPLOYMENTS_TO_DELETE
+for DEPLOYMENT in $DEPLOYMENTS_TO_DELETE_DEDUPED
 do
     echo Deleting deployment $DEPLOYMENT
     kubectl -n$NAMESPACE delete deployment $DEPLOYMENT
